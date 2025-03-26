@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab Report Analysis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        form {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+        }
+        input[type="text"], input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            width: 80%;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        #modal-header {
+            cursor: move;
+            background: #4CAF50;
+            color: white;
+            padding: 10px;
+            border-radius: 4px 4px 0 0;
+            margin: -20px -20px 20px -20px;
+        }
+        #rating-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            z-index: 1001; /* Higher than feedback modal */
+            width: 300px;
+        }
+        /* No overlay for rating modal - removed gray background */
+        .star {
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .star:hover, .star.selected {
+            color: gold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Lab Report Analysis</h1>
+    <form id="upload-form" enctype="multipart/form-data">
+        <label for="student_name">Student Name:</label>
+        <input type="text" id="student_name" name="student_name" required>
+        
+        <label for="lab_report">Lab Report PDF:</label>
+        <input type="file" id="lab_report" name="lab_report" accept=".pdf" required>
+        
+        <label for="rubric">Rubric PDF:</label>
+        <input type="file" id="rubric" name="rubric" accept=".pdf" required>
+        
+        <button type="submit">Submit</button>
+    </form>
+
+    <div id="modal">
+        <div id="modal-header">Analysis Result (Drag Me)</div>
+        <div id="modal-content"></div>
+        <button onclick="downloadPDF()">Download as PDF</button>
+        <button onclick="showRatingModal()">Rate Feedback</button>
+        <button onclick="closeModal()">Close</button>
+    </div>
+
+    <div id="rating-modal">
+        <h3>Rate the Feedback</h3>
+        <div id="stars">
+            <span class="star" data-value="1">★</span>
+            <span class="star" data-value="2">★</span>
+            <span class="star" data-value="3">★</span>
+            <span class="star" data-value="4">★</span>
+            <span class="star" data-value="5">★</span>
+        </div>
+        <textarea id="comments" placeholder="Optional comments" rows="4" style="width: 100%; margin-top: 10px;"></textarea>
+        <button onclick="submitRating()" style="margin-top: 10px;">Submit Rating</button>
+        <button onclick="closeRatingModal()" style="margin-top: 10px;">Close</button>
+    </div>
+
+    <script>
+        let currentDocId = null;
+        let rating = 0;
+
+        // Draggable modal
+        const modal = document.getElementById('modal');
+        const header = document.getElementById('modal-header');
+        let isDragging = false, currentX, currentY, initialX, initialY;
+
+        header.addEventListener('mousedown', startDragging);
+        document.addEventListener('mousemove', drag);
+        document.addEventListener('mouseup', stopDragging);
+
+        function startDragging(e) {
+            initialX = e.clientX - currentX;
+            initialY = e.clientY - currentY;
+            isDragging = true;
+        }
+
+        function drag(e) {
+            if (isDragging) {
+                e.preventDefault();
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+                modal.style.left = currentX + 'px';
+                modal.style.top = currentY + 'px';
+            }
+        }
+
+        function stopDragging() {
+            isDragging = false;
+        }
+
+        modal.addEventListener('mousedown', () => {
+            currentX = modal.offsetLeft;
+            currentY = modal.offsetTop;
+        });
+
+        // Form submission
+        document.getElementById('upload-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            fetch('/analyze_lab_report', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('modal-content').innerHTML = data.analysis_result.replace(/\n/g, '<br>');
+                modal.style.display = 'block';
+                currentDocId = data.doc_id;
+            })
+            .catch(error => console.error('Error:', error));
+        });
+
+        function closeModal() {
+            modal.style.display = 'none';
+        }
+
+        function showRatingModal() {
+            document.getElementById('rating-modal').style.display = 'block';
+        }
+
+        function closeRatingModal() {
+            document.getElementById('rating-modal').style.display = 'none';
+            resetStars();
+        }
+
+        function resetStars() {
+            document.querySelectorAll('.star').forEach(star => {
+                star.classList.remove('selected');
+            });
+            rating = 0;
+            document.getElementById('comments').value = '';
+        }
+
+        document.querySelectorAll('.star').forEach(star => {
+            star.addEventListener('click', function() {
+                rating = this.getAttribute('data-value');
+                document.querySelectorAll('.star').forEach(s => {
+                    s.classList.remove('selected');
+                    if (s.getAttribute('data-value') <= rating) {
+                        s.classList.add('selected');
+                    }
+                });
+            });
+        });
+
+        function submitRating() {
+            const comments = document.getElementById('comments').value;
+            fetch('/submit_rating', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ doc_id: currentDocId, user_rating: rating, user_comments: comments })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert('Rating submitted!');
+                closeRatingModal();
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function downloadPDF() {
+            const content = {
+                student_name: document.getElementById('student_name').value,
+                lab_report: 'Lab Report Content', // Placeholder, adjust as needed
+                rubric: 'Rubric Content', // Placeholder, adjust as needed
+                analysis_result: document.getElementById('modal-content').innerHTML
+            };
+            fetch('/generate_pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(content)
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `lab_report_${content.student_name}.pdf`;
+                a.click();
+            });
+        }
+    </script>
+</body>
+</html>
